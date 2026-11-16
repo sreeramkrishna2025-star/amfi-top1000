@@ -1,0 +1,51 @@
+# AMFI Top 1000 update workflow: CODE-ONLY during the AMFI permission hold.
+#
+# - Manual trigger only (no schedule). Scheduled runs are intentionally absent.
+# - The `test` job runs the synthetic test suite. It does not contact AMFI.
+# - The `fetch-validate` job is gated and can never run as checked in:
+#   it requires the input `permission_cleared` == 'true' AND a repository
+#   variable AMFI_PERMISSION_CLEARED == 'true'. Neither is set.
+# - No publish job exists. Publication needs a separate, reviewed change.
+# - Least privilege: contents: read only. No secrets are used.
+name: amfi-update
+
+on:
+  workflow_dispatch:
+    inputs:
+      permission_cleared:
+        description: "Set to true only after written AMFI permission is recorded"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amfi-update
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependency
+        run: python -m pip install --disable-pip-version-check openpyxl==3.1.5
+      - name: Run synthetic test suite
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+  fetch-validate:
+    needs: test
+    if: ${{ github.event.inputs.permission_cleared == 'true' && vars.AMFI_PERMISSION_CLEARED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - run: echo "Gated job. Real AMFI download is not implemented in this code-only stage."
