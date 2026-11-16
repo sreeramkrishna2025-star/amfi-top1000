@@ -31,7 +31,8 @@ NOT_FOUND_LABEL = "2017H1"
 NOT_DUE_LABEL = "2026H2"
 
 DISCOVERY_STATUSES = {"DISCOVERED", "NOT_FOUND", "NOT_DUE"}
-URL_STATUSES = {"BROWSER_LINK_CONFIRMED", "NOT_FOUND", "NEEDS_INVESTIGATION", "NOT_DUE"}
+URL_STATUSES = {"BROWSER_LINK_CONFIRMED", "PHASE_A_DOWNLOAD_VERIFIED", "NOT_FOUND",
+                "NEEDS_INVESTIGATION", "NOT_DUE"}
 DOWNLOAD_STATUSES = {"DOWNLOAD_VERIFIED", "DOWNLOAD_FAILED", "NOT_DOWNLOADED", "NEEDS_INVESTIGATION", "NOT_FOUND", "NOT_DUE"}
 PARSE_STATUSES = {"NOT_PARSED", "PARSED_VALID", "PARSE_FAILED"}
 VALIDATION_STATUSES = {"NOT_VALIDATED", "VALID", "BLOCKED"}
@@ -238,6 +239,9 @@ def load_aliases(path):
 
 
 def snapshot_path(root, period):
+    """Path for one period's snapshot. Only the 18 expected period labels are accepted."""
+    if period not in {lbl for lbl, _ in expected_periods()}:
+        raise ValueError(f"invalid snapshot period: {period!r}")
     return os.path.join(root, "snapshots", period, "universe.json")
 
 

@@ -25,6 +25,7 @@
   ],
   "url_status": [
    "BROWSER_LINK_CONFIRMED",
+   "PHASE_A_DOWNLOAD_VERIFIED",
    "NOT_FOUND",
    "NEEDS_INVESTIGATION",
    "NOT_DUE"
@@ -243,7 +244,7 @@
    "period_label": "2020H2",
    "period_end_date": "2020-12-31",
    "discovery_status": "DISCOVERED",
-   "url_status": "BROWSER_LINK_CONFIRMED",
+   "url_status": "PHASE_A_DOWNLOAD_VERIFIED",
    "download_status": "DOWNLOAD_VERIFIED",
    "parse_status": "NOT_PARSED",
    "validation_status": "NOT_VALIDATED",
@@ -268,7 +269,7 @@
    "first_detected_date": null,
    "effective_from_estimated": null,
    "effective_confidence": "low",
-   "notes": "Verified by Phase A GitHub Actions probe; SHA-256 not recorded in repo. Excel: raw href has trailing whitespace; PDF filename differs (\"Dec_2020\" vs \"Dec 2020\") | excel: raw href had trailing whitespace; trimmed URL is inferred, not confirmed as fetchable until reviewed | pdf: PDF filename uses \"Dec_2020\"; Excel uses \"Dec 2020\" (both as observed)"
+   "notes": "Draft-2 recorded this Excel as NEEDS_INVESTIGATION (browser DOM link not confirmed). Phase A run 43848842044 proved the URL downloads; this is not a browser-DOM confirmation. Verified by Phase A GitHub Actions probe; SHA-256 not recorded in repo. Excel: raw href has trailing whitespace; PDF filename differs (\"Dec_2020\" vs \"Dec 2020\") | excel: raw href had trailing whitespace; trimmed URL is inferred, not confirmed as fetchable until reviewed | pdf: PDF filename uses \"Dec_2020\"; Excel uses \"Dec 2020\" (both as observed)"
   },
   {
    "period_label": "2021H1",
@@ -460,7 +461,7 @@
    "period_label": "2024H1",
    "period_end_date": "2024-06-30",
    "discovery_status": "DISCOVERED",
-   "url_status": "BROWSER_LINK_CONFIRMED",
+   "url_status": "PHASE_A_DOWNLOAD_VERIFIED",
    "download_status": "DOWNLOAD_VERIFIED",
    "parse_status": "NOT_PARSED",
    "validation_status": "NOT_VALIDATED",
@@ -485,7 +486,7 @@
    "first_detected_date": null,
    "effective_from_estimated": null,
    "effective_confidence": "low",
-   "notes": "Verified by Phase A GitHub Actions probe; SHA-256 not recorded in repo. Excel under /uploads/ path with hashed filename; raw href has trailing whitespace | excel: raw href had trailing whitespace; trimmed URL is inferred, not confirmed as fetchable until reviewed"
+   "notes": "Draft-2 recorded this Excel as NEEDS_INVESTIGATION (browser DOM link not confirmed). Phase A run 43848842044 proved the URL downloads; this is not a browser-DOM confirmation. Verified by Phase A GitHub Actions probe; SHA-256 not recorded in repo. Excel under /uploads/ path with hashed filename; raw href has trailing whitespace | excel: raw href had trailing whitespace; trimmed URL is inferred, not confirmed as fetchable until reviewed"
   },
   {
    "period_label": "2024H2",

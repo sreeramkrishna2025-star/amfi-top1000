@@ -81,6 +81,13 @@ class RepoManifestTests(unittest.TestCase):
             if e["download_status"] == "DOWNLOAD_VERIFIED":
                 self.assertIn("43848842044", e["evidence"])
 
+    def test_phase_a_urls_not_claimed_as_browser_confirmed(self):
+        for lbl in ("2020H2", "2024H1"):
+            e = next(x for x in self.manifest["entries"] if x["period_label"] == lbl)
+            self.assertEqual(e["url_status"], "PHASE_A_DOWNLOAD_VERIFIED")
+            self.assertIn("NEEDS_INVESTIGATION", e["notes"])
+            self.assertIn("not a browser-DOM confirmation", e["notes"])
+
     def test_not_found_and_not_due_recorded_in_coverage(self):
         cov = self.manifest["coverage"]
         self.assertEqual(cov["missing"][0]["period_label"], "2017H1")
@@ -298,6 +305,19 @@ class SnapshotTests(unittest.TestCase):
     def test_layout_is_snapshots_period_universe_json(self):
         vh.write_snapshot(self.root, "2024H1", {"x": 1})
         self.assertTrue(os.path.isfile(os.path.join(self.root, "snapshots", "2024H1", "universe.json")))
+
+    def test_path_traversal_periods_rejected_and_nothing_written(self):
+        bad = ["../escaped", "2026H1/../escaped", "/abs", "..", "2017H1", "2026H2", "", "2026H1 ", "2026h1"]
+        for period in bad:
+            with self.subTest(period=period):
+                with self.assertRaises(ValueError):
+                    vh.write_snapshot(self.root, period, {"x": 1})
+        self.assertFalse(os.path.exists(os.path.join(self.root, "escaped")))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "snapshots")))
+
+    def test_every_expected_period_accepted(self):
+        for lbl, _ in vh.expected_periods():
+            self.assertTrue(vh.snapshot_path(self.root, lbl).endswith(os.path.join("snapshots", lbl, "universe.json")))
 
     def test_key_order_does_not_change_identity(self):
         vh.write_snapshot(self.root, "2024H2", {"a": 1, "b": 2})
