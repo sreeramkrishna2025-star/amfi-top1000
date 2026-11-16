@@ -1,0 +1,151 @@
+name: AMFI access probe (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe two approved AMFI Excel URLs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Single-attempt probe with validated redirects (no parsing)
+        shell: bash
+        run: |
+          python3 -I - <<'PY'
+          import hashlib, json, os, shutil, tempfile, urllib.error, urllib.parse, urllib.request, zipfile
+
+          APPROVED_HOSTS = {"www.amfiindia.com", "portal.amfiindia.com"}
+          UA = "amfi-top1000-access-probe/1.0 (manual feasibility test)"
+          MAX_BYTES = 30 * 1024 * 1024
+          EXCEL_CTYPES = ("spreadsheetml", "ms-excel", "octet-stream", "application/zip")
+          TARGETS = [
+              ("2020H2", "https://www.amfiindia.com/Themes/Theme1/downloads/Average%20Market%20Capitalization%20of%20Listed%20Companies%20during%20Jul%20-%20Dec%202020_Final.xlsx"),
+              ("2024H1", "https://www.amfiindia.com/uploads/Average_Market_Capitalization_30_Jun2024_2a1ab4c1d8.xlsx"),
+          ]
+
+          def url_problem(url):
+              p = urllib.parse.urlsplit(url)
+              if p.scheme.lower() != "https":
+                  return "scheme is not https"
+              if p.username is not None or p.password is not None:
+                  return "userinfo present"
+              try:
+                  port = p.port
+              except ValueError:
+                  return "malformed port"
+              if port not in (None, 443):
+                  return "unexpected port"
+              host = (p.hostname or "").lower()
+              if host not in APPROVED_HOSTS:
+                  return "host not approved: " + host
+              return None
+
+          class ValidatedRedirects(urllib.request.HTTPRedirectHandler):
+              max_redirections = 3
+              max_repeats = 2
+
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  target = urllib.parse.urljoin(req.full_url, newurl)
+                  problem = url_problem(target)
+                  if problem:
+                      raise urllib.error.URLError("redirect refused (" + problem + ")")
+                  return super().redirect_request(req, fp, code, msg, headers, target)
+
+          def fetch(url):
+              # One attempt only. No retry on 403 or any other status.
+              opener = urllib.request.build_opener(ValidatedRedirects())
+              req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
+              try:
+                  with opener.open(req, timeout=120) as resp:
+                      body = resp.read(MAX_BYTES + 1)
+                      return {"http_status": resp.status, "final_url": resp.geturl(),
+                              "content_type": resp.headers.get("Content-Type", ""), "body": body, "error": ""}
+              except urllib.error.HTTPError as e:
+                  ctype = e.headers.get("Content-Type", "") if e.headers else ""
+                  return {"http_status": e.code, "final_url": getattr(e, "url", url) or url,
+                          "content_type": ctype, "body": b"", "error": "HTTP %s %s" % (e.code, e.reason)}
+              except Exception as e:
+                  return {"http_status": None, "final_url": url, "content_type": "", "body": b"",
+                          "error": "%s: %s" % (type(e).__name__, str(e)[:200])}
+
+          def analyse(label, res, workdir):
+              checks = {
+                  "http_status": res["http_status"],
+                  "final_url": res["final_url"],
+                  "content_type": res["content_type"],
+                  "size_bytes": len(res["body"]),
+                  "sha256": "",
+                  "zip_signature": False,
+                  "xlsx_structure": False,
+                  "zip_integrity": False,
+                  "html_error_page": False,
+                  "error": res["error"],
+              }
+              if res["error"]:
+                  return checks, "DOWNLOAD_FAILED"
+              body = res["body"]
+              if len(body) > MAX_BYTES:
+                  return checks, "NEEDS_INVESTIGATION"
+              checks["sha256"] = hashlib.sha256(body).hexdigest()
+              head = body[:512].lower()
+              checks["html_error_page"] = (b"<html" in head) or (body.lstrip()[:1] == b"<")
+              checks["zip_signature"] = body[:4] == b"PK\x03\x04"
+              if checks["zip_signature"]:
+                  path = os.path.join(workdir, label + ".xlsx")
+                  with open(path, "wb") as fh:
+                      fh.write(body)
+                  try:
+                      with zipfile.ZipFile(path) as z:
+                          names = set(z.namelist())
+                          checks["xlsx_structure"] = ("[Content_Types].xml" in names) and ("xl/workbook.xml" in names)
+                          checks["zip_integrity"] = z.testzip() is None
+                  except zipfile.BadZipFile:
+                      pass
+              if res["http_status"] != 200:
+                  return checks, "NEEDS_INVESTIGATION"
+              if url_problem(res["final_url"]):
+                  return checks, "NEEDS_INVESTIGATION"
+              if checks["html_error_page"] or not checks["zip_signature"] or not checks["xlsx_structure"] or not checks["zip_integrity"]:
+                  return checks, "WORKBOOK_INVALID"
+              ctype = res["content_type"].lower()
+              if "html" in ctype or not any(t in ctype for t in EXCEL_CTYPES):
+                  return checks, "NEEDS_INVESTIGATION"
+              return checks, "DOWNLOAD_VERIFIED"
+
+          def main():
+              workdir = tempfile.mkdtemp(prefix="amfi_probe_", dir=os.environ.get("RUNNER_TEMP"))
+              results = {}
+              try:
+                  for label, url in TARGETS:
+                      problem = url_problem(url)
+                      if problem:
+                          results[label] = ({"error": "initial URL not approved: " + problem}, "NEEDS_INVESTIGATION")
+                          continue
+                      results[label] = analyse(label, fetch(url), workdir)
+              finally:
+                  shutil.rmtree(workdir, ignore_errors=True)
+
+              header = ("| File | HTTP | Final URL | Content-Type | Size (bytes) | SHA-256 | ZIP sig | XLSX structure | ZIP integrity | HTML error page | Verdict |\n"
+                        "|---|---|---|---|---|---|---|---|---|---|---|\n")
+              rows = []
+              for label, (c, verdict) in results.items():
+                  rows.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+                      label, c.get("http_status"), c.get("final_url"), c.get("content_type") or "n/a",
+                      c.get("size_bytes"), c.get("sha256") or "n/a", c.get("zip_signature"),
+                      c.get("xlsx_structure"), c.get("zip_integrity"), c.get("html_error_page"), verdict))
+                  if c.get("error"):
+                      rows.append("\n%s error: %s\n" % (label, c["error"]))
+              report = header + "\n".join(rows) + "\n"
+              print(report)
+              print(json.dumps({k: {"verdict": v, **c} for k, (c, v) in results.items()}, indent=1))
+              summary = os.environ.get("GITHUB_STEP_SUMMARY")
+              if summary:
+                  with open(summary, "a", encoding="utf-8") as fh:
+                      fh.write("## AMFI access probe\n\n" + report)
+
+          main()
+          PY
