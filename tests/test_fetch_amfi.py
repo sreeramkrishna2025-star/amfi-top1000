@@ -285,6 +285,39 @@ class FetchFailureTests(unittest.TestCase):
         self.assertIn("empty directory", res["error"])
 
 
+class TimeLimitTests(unittest.TestCase):
+    def setUp(self):
+        self.dest = tempfile.mkdtemp(prefix="amfi_test_dest_")
+
+    def tearDown(self):
+        for n in os.listdir(self.dest):
+            os.remove(os.path.join(self.dest, n))
+        os.rmdir(self.dest)
+
+    def test_slow_drip_download_stopped_by_total_time_limit(self):
+        class TickClock:
+            def __init__(self):
+                self.t = 0.0
+
+            def __call__(self):
+                self.t += 50.0  # each check advances 50s
+                return self.t
+
+        from _helpers import minimal_xlsx_bytes
+        body = minimal_xlsx_bytes() * 1000  # several read blocks
+        res = fa.fetch(GOOD_URL, self.dest, opener=FakeOpener(FakeResp(body)),
+                       sleep=lambda s: None, max_seconds=120, clock=TickClock())
+        self.assertEqual(res["status"], "DOWNLOAD_FAILED")
+        self.assertIn("time limit", res["error"])
+        self.assertEqual(os.listdir(self.dest), [])
+
+    def test_normal_download_within_limit_succeeds(self):
+        from _helpers import minimal_xlsx_bytes
+        res = fa.fetch(GOOD_URL, self.dest, opener=FakeOpener(FakeResp(minimal_xlsx_bytes())),
+                       sleep=lambda s: None, max_seconds=120, clock=lambda: 0.0)
+        self.assertEqual(res["status"], "DOWNLOAD_VERIFIED")
+
+
 class CliTests(unittest.TestCase):
     def test_cli_refuses_without_permission_hold_acknowledgement(self):
         with mock.patch.object(fa, "fetch") as f, mock.patch("builtins.print"):

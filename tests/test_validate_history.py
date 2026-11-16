@@ -356,3 +356,23 @@ class PointInTimeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkflowPinningTests(unittest.TestCase):
+    def test_actions_pinned_to_full_commit_shas(self):
+        import re
+        path = os.path.join(REPO, ".github", "workflows", "amfi-update.yml")
+        with open(path, encoding="utf-8") as fh:
+            uses = re.findall(r"uses:\s*(\S+)", fh.read())
+        self.assertTrue(uses)
+        for u in uses:
+            self.assertRegex(u, r"@[0-9a-f]{40}$", u)
+
+    def test_workflow_is_manual_only_and_read_only(self):
+        path = os.path.join(REPO, ".github", "workflows", "amfi-update.yml")
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertIn("workflow_dispatch", text)
+        self.assertNotIn("schedule:", text)
+        self.assertIn("contents: read", text)
+        self.assertNotIn("contents: write", text)

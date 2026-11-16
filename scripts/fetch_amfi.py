@@ -34,7 +34,8 @@ ALLOWED_PORTS = (None, 443)
 MAX_REDIRECTS = 3
 MAX_BYTES = 25 * 1024 * 1024          # 25 MiB hard cap; AMFI Excel files are ~50-100 KB
 CHUNK = 64 * 1024
-TIMEOUT_SECONDS = 30
+TIMEOUT_SECONDS = 30                   # per socket operation
+MAX_SECONDS = 120                      # total wall-clock budget for one attempt
 RETRY_BACKOFF = (2, 4)                 # 3 attempts total: 1 + 2 retries
 ACCEPTED_CONTENT_TYPES = frozenset({
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -134,7 +135,7 @@ def _status(resp):
     return code
 
 
-def _download_once(opener, url, dest_dir, max_bytes, timeout):
+def _download_once(opener, url, dest_dir, max_bytes, timeout, max_seconds=MAX_SECONDS, clock=time.monotonic):
     """One attempt. Returns a result dict; raises FetchError(transient=bool) on failure."""
     req = urllib.request.Request(url, headers={"User-Agent": "amfi-top1000-validator/0.1"})
     try:
@@ -169,9 +170,12 @@ def _download_once(opener, url, dest_dir, max_bytes, timeout):
     h = hashlib.sha256()
     size = 0
     head = b""
+    started = clock()
     try:
         with os.fdopen(fd, "wb") as out:
             while True:
+                if clock() - started > max_seconds:
+                    raise FetchError(f"download time limit exceeded (> {max_seconds}s)", transient=False, http_status=status)
                 block = resp.read(CHUNK)
                 if not block:
                     break
@@ -215,7 +219,7 @@ def _safe_remove(path):
 
 
 def fetch(url, dest_dir, opener=None, max_bytes=MAX_BYTES, timeout=TIMEOUT_SECONDS,
-          attempts=1 + len(RETRY_BACKOFF), sleep=time.sleep):
+          attempts=1 + len(RETRY_BACKOFF), sleep=time.sleep, max_seconds=MAX_SECONDS, clock=time.monotonic):
     """Download one AMFI workbook into dest_dir. Never raises; returns a status dict.
 
     status is DOWNLOAD_VERIFIED on success, otherwise DOWNLOAD_FAILED (with 'error').
@@ -230,7 +234,7 @@ def fetch(url, dest_dir, opener=None, max_bytes=MAX_BYTES, timeout=TIMEOUT_SECON
     last_error = None
     for attempt in range(1, attempts + 1):
         try:
-            result = _download_once(opener, url, dest_dir, max_bytes, timeout)
+            result = _download_once(opener, url, dest_dir, max_bytes, timeout, max_seconds, clock)
             result["attempts"] = attempt
             return result
         except FetchError as e:
