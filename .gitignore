@@ -1,0 +1,11 @@
+# Local scratch only; never commit secrets or temp outputs
+__pycache__/
+*.pyc
+.venv/
+tmp/
+*.tmp
+.env
+.env.*
+*.key
+*.pem
+secrets*
