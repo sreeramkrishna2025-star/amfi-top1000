@@ -104,7 +104,11 @@ def discover(html, base_url=BASE, rejected=None):
     parser.feed(html)
     found = []
     seen = set()
-    for href, text in parser.links:
+    for raw_href, text in parser.links:
+        # Trim surrounding whitespace only; whitespace inside the path is never changed.
+        href = raw_href.strip()
+        if not href:
+            continue
         url = urljoin(base_url, href)
         ok, reason = check_official_url(url)
         if not ok:
@@ -123,6 +127,7 @@ def discover(html, base_url=BASE, rejected=None):
             end, label = period_from(text)
         found.append({
             "url": url,
+            "raw_href": raw_href,
             "kind": "excel" if is_excel else "pdf",
             "period_end_date": end,
             "period_label": label,
